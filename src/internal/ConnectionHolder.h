@@ -4,8 +4,8 @@
 // ConnectionHolder.h holds everything needed to define a connection.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_INTERNAL_CONNECTIONHOLDER_H_
-#define QNE_INTERNAL_CONNECTIONHOLDER_H_
+#ifndef QNETHERNET_INTERNAL_CONNECTIONHOLDER_H_
+#define QNETHERNET_INTERNAL_CONNECTIONHOLDER_H_
 
 // C++ includes
 #include <memory>
@@ -28,7 +28,7 @@ struct ConnectionHolder final {
   // Remaining data after a connection is closed
   // Will only be non-empty after the connection is closed
   volatile size_t remainingPos = 0;
-  std::vector<unsigned char> remaining;
+  std::vector<uint8_t> remaining;
   // `remainingPos` should never be past the end of `remaining`
 };
 
@@ -36,4 +36,4 @@ struct ConnectionHolder final {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_INTERNAL_CONNECTIONHOLDER_H_
+#endif  // QNETHERNET_INTERNAL_CONNECTIONHOLDER_H_

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // Receiver.h defines an interface for handling PixelPusher commands
@@ -39,16 +39,15 @@ class Receiver {
   virtual uint8_t stripFlags(int stripNum) const = 0;
 
   // Handles a PixelPusher command.
-  virtual void handleCommand(int command,
-                             const unsigned char *data, int len) {}
+  virtual void handleCommand(int command, const uint8_t *data, int len) {}
 
-  // Starts receiving pixels from a packet. The `complete` paameter
+  // Starts receiving pixels from a packet. The `complete` parameter
   // indicates whether the complete set of pixels will be included in
   // the pixel data.
   virtual void startPixels(bool complete) = 0;
 
   // Processes pixels for one strip.
-  virtual void pixels(int stripNum, const unsigned char *pixels,
+  virtual void pixels(int stripNum, const uint8_t *pixels,
                       int pixelsPerStrip) = 0;
 
   // All the pixels from the packet have been sent to this receiver.

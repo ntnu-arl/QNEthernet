@@ -4,8 +4,8 @@
 // ConnectionState.h defines all the data needed to host a connection.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_INTERNAL_CONNECTIONSTATE_H_
-#define QNE_INTERNAL_CONNECTIONSTATE_H_
+#ifndef QNETHERNET_INTERNAL_CONNECTIONSTATE_H_
+#define QNETHERNET_INTERNAL_CONNECTIONSTATE_H_
 
 // C++ includes
 #include <functional>
@@ -40,7 +40,7 @@ struct ConnectionState final {
   tcp_pcb *volatile pcb = nullptr;
 
   // Incoming data buffer
-  std::vector<unsigned char> buf;
+  std::vector<uint8_t> buf;
   volatile size_t bufPos = 0;
 
   // Called from the desctructor after the callback arg is deleted.
@@ -51,4 +51,4 @@ struct ConnectionState final {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_INTERNAL_CONNECTIONSTATE_H_
+#endif  // QNETHERNET_INTERNAL_CONNECTIONSTATE_H_

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QMMDNS.cpp implements MDNS.
@@ -8,7 +8,6 @@
 
 // C++ includes
 #include <algorithm>
-#include <cstring>
 
 #include "lwip/apps/mdns.h"
 
@@ -20,8 +19,10 @@ namespace network {
 // Recommended DNS TTL value, in seconds, per RFC 6762 "Multicast DNS".
 static constexpr uint32_t kTTL = 120;
 
-// Define the singleton instance.
-MDNSClass MDNSClass::instance_;
+MDNSClass &MDNSClass::instance() {
+  static MDNSClass instance;
+  return instance;
+}
 
 // A reference to the singleton.
 MDNSClass &MDNS = MDNSClass::instance();
@@ -46,14 +47,15 @@ static void srv_txt(struct mdns_service *service, void *txt_userdata) {
 }
 
 static bool initialized = false;
+static bool netifAdded = false;
 
 MDNSClass::~MDNSClass() {
   end();
 }
 
 bool MDNSClass::begin(const char *hostname) {
-  netif_ = netif_default;
-  if (netif_ == nullptr) {
+  if (netif_default == nullptr) {
+    // Return false for no netif
     return false;
   }
 
@@ -62,27 +64,37 @@ bool MDNSClass::begin(const char *hostname) {
     initialized = true;
   }
 
-  if (mdns_resp_add_netif(netif_, hostname, kTTL) != ERR_OK) {
-    netif_ = nullptr;
+  // Treat nullptr hostname as not allowed
+  if (hostname == nullptr) {
     return false;
   }
+
+  if (netifAdded) {
+    if (hostname_ == hostname) {
+      return true;
+    }
+    end();
+  }
+  if (mdns_resp_add_netif(netif_default, hostname, kTTL) != ERR_OK) {
+    return false;
+  }
+  netifAdded = true;
+  netif_ = netif_default;
   hostname_ = hostname;
   return true;
 }
 
-bool MDNSClass::end() {
-  if (netif_ == nullptr) {
-    // Return true for no netif
-    return true;
+void MDNSClass::end() {
+  if (netifAdded) {
+    mdns_resp_remove_netif(netif_);
+    netifAdded = false;
+    netif_ = nullptr;
+    hostname_ = "";
   }
-  bool retval = (mdns_resp_remove_netif(netif_) == ERR_OK);
-  netif_ = nullptr;
-  hostname_ = "";
-  return retval;
 }
 
 void MDNSClass::restart() {
-  if (netif_ == nullptr) {
+  if (!netifAdded) {
     return;
   }
   mdns_resp_restart(netif_);
@@ -117,7 +129,8 @@ bool MDNSClass::addService(const char *type, const char *protocol,
 bool MDNSClass::addService(const char *name, const char *type,
                            const char *protocol, uint16_t port,
                            std::vector<String> (*getTXTFunc)(void)) {
-  if (netif_ == nullptr) {
+  if (!netifAdded) {
+    // Return false for no netif
     return false;
   }
 
@@ -155,9 +168,9 @@ bool MDNSClass::removeService(const char *type, const char *protocol,
 
 bool MDNSClass::removeService(const char *name, const char *type,
                               const char *protocol, uint16_t port) {
-  if (netif_ == nullptr) {
-    // Return true for no netif
-    return true;
+  if (!netifAdded) {
+    // Return false for no netif
+    return false;
   }
 
   // Find a matching service
@@ -176,7 +189,7 @@ uint32_t MDNSClass::ttl() const {
 }
 
 void MDNSClass::announce() const {
-  if (netif_ == nullptr) {
+  if (!netifAdded) {
     return;
   }
   mdns_resp_announce(netif_);

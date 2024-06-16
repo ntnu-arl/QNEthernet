@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // OctoWS2811Receiver.h defines a Receiver implementation that uses an
@@ -44,10 +44,9 @@ class OctoWS2811Receiver : public Receiver {
   }
 
   uint8_t stripFlags(int stripNum) const override;
-  void handleCommand(int command, const unsigned char *data, int len) override;
+  void handleCommand(int command, const uint8_t *data, int len) override;
   void startPixels(bool complete) override {}
-  void pixels(int stripNum, const unsigned char *pixels,
-              int pixelsPerStrip) override;
+  void pixels(int stripNum, const uint8_t *pixels, int pixelsPerStrip) override;
   void endPixels() override;
   void loop() override {}
 

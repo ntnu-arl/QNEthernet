@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // PixelPusherServer.h is the include file for the PixelPusher server.
@@ -163,7 +163,7 @@ class PixelPusherServer final {
     uint8_t stripFlags(int stripNum) const override { return 0; }
 
     void startPixels(bool complete) override {}
-    void pixels(int stripNum, const unsigned char *pixels,
+    void pixels(int stripNum, const uint8_t *pixels,
                 int pixelsPerStrip) override {}
     void endPixels() override {}
     void loop() override {}

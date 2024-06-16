@@ -1,10 +1,10 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetFrame.cpp contains an EthernetFrame implementation.
 // This file is part of the QNEthernet library.
 
-#ifndef QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#ifdef QNETHERNET_ENABLE_RAW_FRAME_SUPPORT
 
 #include "QNEthernetFrame.h"
 
@@ -32,8 +32,10 @@ err_t unknown_eth_protocol(struct pbuf *p, struct netif *netif) {
 namespace qindesign {
 namespace network {
 
-// Define the singleton instance.
-EthernetFrameClass EthernetFrameClass::instance_;
+EthernetFrameClass &EthernetFrameClass::instance() {
+  static EthernetFrameClass instance;
+  return instance;
+}
 
 // A reference to the singleton.
 EthernetFrameClass &EthernetFrame = EthernetFrameClass::instance();
@@ -47,7 +49,7 @@ err_t EthernetFrameClass::recvFunc(struct pbuf *p, struct netif *netif) {
   frame.data.reserve(p->tot_len);
   // TODO: Limit vector size
   while (p != nullptr) {
-    unsigned char *data = reinterpret_cast<unsigned char *>(p->payload);
+    uint8_t *data = reinterpret_cast<uint8_t *>(p->payload);
     frame.data.insert(frame.data.end(), &data[0], &data[p->len]);
     p = p->next;
   }
@@ -98,7 +100,7 @@ int EthernetFrameClass::parseFrame() {
   inBufTail_ = (inBufTail_ + 1) % inBuf_.size();
   inBufSize_--;
 
-  EthernetClass::loop();  // Allow the stack to move along
+  Ethernet.loop();  // Allow the stack to move along
 
   if (frame_.data.size() > 0) {
     framePos_ = 0;
@@ -128,7 +130,7 @@ int EthernetFrameClass::read() {
   return frame_.data[framePos_++];
 }
 
-int EthernetFrameClass::read(unsigned char *buffer, size_t len) {
+int EthernetFrameClass::read(uint8_t *buffer, size_t len) {
   if (len == 0 || !isAvailable()) {
     return 0;
   }
@@ -141,7 +143,7 @@ int EthernetFrameClass::read(unsigned char *buffer, size_t len) {
 }
 
 int EthernetFrameClass::read(char *buffer, size_t len) {
-  return read(reinterpret_cast<unsigned char *>(buffer), len);
+  return read(reinterpret_cast<uint8_t *>(buffer), len);
 }
 
 int EthernetFrameClass::peek() {
@@ -151,7 +153,7 @@ int EthernetFrameClass::peek() {
   return frame_.data[framePos_];
 }
 
-const unsigned char *EthernetFrameClass::data() const {
+const uint8_t *EthernetFrameClass::data() const {
   return frame_.data.data();
 }
 
@@ -273,4 +275,4 @@ int EthernetFrameClass::availableForWrite() {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // !QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#endif  // QNETHERNET_ENABLE_RAW_FRAME_SUPPORT

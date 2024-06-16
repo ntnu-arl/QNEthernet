@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // PixelPusherServer.cpp implements the PixelPusher server.
@@ -105,7 +105,7 @@ bool PixelPusherServer::begin(Receiver *recv, uint16_t port,
   lastUpdateTimes_ = std::make_unique<CircularBuffer<uint32_t>>(
       (numStrips + ppData1_.maxStripsPerPacket - 1)/
       ppData1_.maxStripsPerPacket);
-  printf("k=%u\n", lastUpdateTimes_->capacity());
+  printf("k=%u\r\n", lastUpdateTimes_->capacity());
 
   if (started_) {
     end();
@@ -164,7 +164,7 @@ void PixelPusherServer::loop() {
     return;
   }
 
-  const unsigned char *data = pixelsUDP_.data();
+  const uint8_t *data = pixelsUDP_.data();
 
   uint32_t seq;
   std::memcpy(&seq, data, 4);
@@ -242,7 +242,7 @@ void PixelPusherServer::sendDiscovery() {
   discoveryUDP_.endPacket();
 
   // Some debug output
-  // printf("update=%" PRIu32 " delta=%" PRIu32 "\n",
+  // printf("update=%" PRIu32 " delta=%" PRIu32 "\r\n",
   //        ppData1_.updatePeriod, ppData1_.deltaSequence);
 
   ppData1_.deltaSequence = 0;

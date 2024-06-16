@@ -1,15 +1,16 @@
-// SPDX-FileCopyrightText: (c) 2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2022-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetFrame.h defines the raw frame interface.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_ETHERNETFRAME_H_
-#define QNE_ETHERNETFRAME_H_
+#ifndef QNETHERNET_ETHERNETFRAME_H_
+#define QNETHERNET_ETHERNETFRAME_H_
 
-#ifndef QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#ifdef QNETHERNET_ENABLE_RAW_FRAME_SUPPORT
 
 // C++ includes
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <vector>
@@ -37,9 +38,7 @@ namespace network {
 class EthernetFrameClass final : public Stream {
  public:
   // Accesses the singleton instance.
-  static EthernetFrameClass &instance() {
-    return instance_;
-  }
+  static EthernetFrameClass &instance();
 
   // EthernetFrameClass is neither copyable nor movable
   EthernetFrameClass(const EthernetFrameClass &) = delete;
@@ -104,7 +103,7 @@ class EthernetFrameClass final : public Stream {
   int parseFrame();
   int available() override;
   int read() override;
-  int read(unsigned char *buffer, size_t len);
+  int read(uint8_t *buffer, size_t len);
 
   // A NULL buffer allows the caller to skip bytes without having to read into
   // a buffer.
@@ -117,7 +116,7 @@ class EthernetFrameClass final : public Stream {
   int availableForWrite() override;
 
   // Returns a pointer to the received frame data.
-  const unsigned char *data() const;
+  const uint8_t *data() const;
 
   // Sets the receive queue size. This will use a minimum of 1.
   //
@@ -162,15 +161,12 @@ class EthernetFrameClass final : public Stream {
   bool hasOutFrame_ = false;
   Frame outFrame_;
 
-  // The singleton instance.
-  static EthernetFrameClass instance_;
-
   friend err_t ::unknown_eth_protocol(struct pbuf *p, struct netif *netif);
 };
 
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // !QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#endif  // QNETHERNET_ENABLE_RAW_FRAME_SUPPORT
 
-#endif  // QNE_ETHERNETFRAME_H_
+#endif  // QNETHERNET_ETHERNETFRAME_H_

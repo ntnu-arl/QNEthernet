@@ -29,6 +29,7 @@ setMACAddress	KEYWORD2	EthernetSetMACAddress
 mtu	KEYWORD2
 loop	KEYWORD2
 begin	KEYWORD2
+isDHCPActive	KEYWORD2
 waitForLocalIP	KEYWORD2
 waitForLink	KEYWORD2
 end	KEYWORD2
@@ -38,6 +39,8 @@ linkSpeed	KEYWORD2
 linkIsFullDuplex	KEYWORD2
 onLinkState	KEYWORD2
 onAddressChanged	KEYWORD2
+onInterfaceStatus	KEYWORD2
+interfaceStatus	KEYWORD2
 localIP	KEYWORD2	EthernetLocalIP
 subnetMask	KEYWORD2	EthernetSubnetMask
 gatewayIP	KEYWORD2	EthernetGatewayIP
@@ -54,6 +57,7 @@ setHostname	KEYWORD2
 hostname	KEYWORD2
 maxSockets	KEYWORD2
 connect	KEYWORD2	ClientConnect
+connectNoWait	KEYWORD2
 connected	KEYWORD2	ClientConnected
 setConnectionTimeout	KEYWORD2	EthernetClientSetConnectionTimeout
 stop	KEYWORD2
@@ -64,6 +68,7 @@ localPort	KEYWORD2	ClientLocalPort
 data	KEYWORD2
 remoteIP	KEYWORD2
 remotePort	KEYWORD2
+connectionId	KEYWORD2
 writeFully	KEYWORD2
 write	KEYWORD2
 availableForWrite	KEYWORD2
@@ -75,8 +80,10 @@ setNoDelay	KEYWORD2
 isNoDelay	KEYWORD2
 maxListeners	KEYWORD2
 port	KEYWORD2
+beginWithReuse	KEYWORD2
 accept	KEYWORD2	EthernetServerAccept
 beginMulticast	KEYWORD2	WiFiNINAUDPBeginMulticast
+beginMulticastWithReuse	KEYWORD2
 beginPacket	KEYWORD2	EthernetUDPBeginPacket
 endPacket	KEYWORD2	EthernetUDPEndPacket
 send	KEYWORD2

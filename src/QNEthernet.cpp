@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernet.cpp contains the Teensy 4.1 Ethernet implementation.
@@ -15,13 +15,14 @@
 #include "QNDNSClient.h"
 #include "lwip/dhcp.h"
 #include "lwip/igmp.h"
-#include "util/ip_tools.h"
 
 namespace qindesign {
 namespace network {
 
-// Define the singleton instance.
-EthernetClass EthernetClass::instance_;
+EthernetClass &EthernetClass::instance() {
+  static EthernetClass instance;
+  return instance;
+}
 
 // A reference to the singleton.
 EthernetClass &Ethernet = EthernetClass::instance();
@@ -33,7 +34,7 @@ static bool ethActive = false;
 // Attach the loop() call to yield() via EventResponder.
 static void attachLoopToYield() {
   ethLoop.attach([](EventResponderRef r) {
-    EthernetClass::loop();
+    Ethernet.loop();
     if (ethActive) {
       r.triggerEvent();
     }
@@ -56,6 +57,12 @@ void EthernetClass::netifEventFunc(struct netif *netif,
   if (reason & LWIP_NSC_IPV4_SETTINGS_CHANGED) {
     if (Ethernet.addressChangedCB_ != nullptr) {
       Ethernet.addressChangedCB_();
+    }
+  }
+
+  if (reason & LWIP_NSC_STATUS_CHANGED) {
+    if (Ethernet.interfaceStatusCB_ != nullptr && args != nullptr) {
+      Ethernet.interfaceStatusCB_(args->status_changed.state != 0);
     }
   }
 }
@@ -108,6 +115,7 @@ void EthernetClass::setMACAddress(const uint8_t mac[6]) {
   }
 
   dhcp_release_and_stop(netif_);  // Stop DHCP in all cases
+  dhcpActive_ = false;
   netif_set_down(netif_);
 
   begin(netif_ip4_addr(netif_),
@@ -115,15 +123,12 @@ void EthernetClass::setMACAddress(const uint8_t mac[6]) {
         netif_ip4_gw(netif_));
 }
 
-// Declare this static object.
-elapsedMillis EthernetClass::loopTimer_;
-
 void EthernetClass::loop() {
   enet_proc_input();
 
-  if (loopTimer_ >= 125) {
+  if (pollTimer_ >= kPollInterval) {
     enet_poll();
-    loopTimer_ = 0;
+    pollTimer_ = 0;
   }
 }
 
@@ -152,6 +157,7 @@ bool EthernetClass::begin(const IPAddress &ip,
         !ip4_addr_isany_val(netmask) ||
         !ip4_addr_isany_val(gw)) {
       dhcp_release_and_stop(netif_);
+      dhcpActive_ = false;
     }
     netif_set_down(netif_);
   }
@@ -185,8 +191,10 @@ bool EthernetClass::begin(const ip4_addr_t *ipaddr,
       !ip4_addr_isany(netmask) ||
       !ip4_addr_isany(gw)) {
     dhcp_inform(netif_);
+    dhcpActive_ = false;
   } else {
     retval = (dhcp_start(netif_) == ERR_OK);
+    dhcpActive_ = retval;
   }
 
   ethActive = true;
@@ -262,6 +270,7 @@ void EthernetClass::end() {
 
   DNSClient::setServer(0, INADDR_NONE);
   dhcp_release_and_stop(netif_);
+  dhcpActive_ = false;
   netif_set_down(netif_);
 
   enet_deinit();
@@ -285,6 +294,13 @@ int EthernetClass::linkSpeed() const {
 
 bool EthernetClass::linkIsFullDuplex() const {
   return enet_link_is_full_duplex();
+}
+
+bool EthernetClass::interfaceStatus() const {
+  if (netif_ == nullptr) {
+    return false;
+  }
+  return netif_is_up(netif_);
 }
 
 IPAddress EthernetClass::localIP() const {

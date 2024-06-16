@@ -4,10 +4,11 @@
 // QNDNSClient.h defines the DNS client interface.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_DNSCLIENT_H_
-#define QNE_DNSCLIENT_H_
+#ifndef QNETHERNET_DNSCLIENT_H_
+#define QNETHERNET_DNSCLIENT_H_
 
 // C++ includes
+#include <cstdint>
 #include <functional>
 
 #include <IPAddress.h>
@@ -61,6 +62,7 @@ class DNSClient final {
   };
 
   DNSClient() = default;
+  ~DNSClient() = default;
 
   static void dnsFoundFunc(const char *name, const ip_addr_t *ipaddr,
                            void *callback_arg);
@@ -69,4 +71,4 @@ class DNSClient final {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_DNSCLIENT_H_
+#endif  // QNETHERNET_DNSCLIENT_H_

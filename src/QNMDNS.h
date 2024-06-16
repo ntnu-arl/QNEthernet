@@ -1,13 +1,14 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNMDNS.h defines an mDNS implementation.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_MDNS_H_
-#define QNE_MDNS_H_
+#ifndef QNETHERNET_MDNS_H_
+#define QNETHERNET_MDNS_H_
 
 // C++ includes
+#include <cstdint>
 #include <vector>
 
 #include <WString.h>
@@ -24,15 +25,11 @@ namespace network {
 class MDNSClass final {
  public:
   // Accesses the singleton instance.
-  static MDNSClass &instance() {
-    return instance_;
-  }
+  static MDNSClass &instance();
 
   // MDNSClass is neither copyable nor movable
   MDNSClass(const MDNSClass &) = delete;
   MDNSClass &operator=(const MDNSClass &) = delete;
-
-  ~MDNSClass();
 
   // Returns the maximum number of services this can support.
   static constexpr int maxServices() {
@@ -41,11 +38,13 @@ class MDNSClass final {
 
   // Starts the mDNS responder and uses the given hostname as the name. This
   // returns whether the call was successful.
+  //
+  // This first calls end() if the responder is already running and the hostname
+  // is different.
   bool begin(const char *hostname);
 
-  // Attempts to stop the mDNS responder. Returns whether the call
-  // was successful.
-  bool end();
+  // Stops the mDNS responder.
+  void end();
 
   // Returns the hostname. This will return an empty string if the responder
   // is not currently running.
@@ -55,6 +54,9 @@ class MDNSClass final {
 
   // Restarts the responder. This is useful when the cable has been disconnected
   // for a while and then reconnected.
+  //
+  // This isn't normally needed because the responder already watches for
+  // link reconnect.
   void restart();
 
   // Adds a service. The protocol will be set to "_udp" for anything other than
@@ -95,10 +97,11 @@ class MDNSClass final {
                   const char *protocol, uint16_t port,
                   std::vector<String> (*getTXTFunc)(void));
 
-  // Removes a service. The host name is used as the service name.
+  // Removes a service. The host name is used as the service name. This will
+  // return whether the service was removed.
   bool removeService(const char *type, const char *protocol, uint16_t port);
 
-  // Removes a service.
+  // Removes a service and returns whether the service was removed.
   bool removeService(const char *name, const char *type,
                      const char *protocol, uint16_t port);
 
@@ -118,7 +121,7 @@ class MDNSClass final {
   void announce() const;
 
  private:
-  struct Service {
+  struct Service final {
     bool operator==(const Service &other) {
       if (!valid || !other.valid) {
         // Invalid services compare unequal
@@ -153,6 +156,7 @@ class MDNSClass final {
   };
 
   MDNSClass() = default;
+  ~MDNSClass();
 
   // Finds the slot for the given service. This returns -1 if the service could
   // not be found.
@@ -164,9 +168,6 @@ class MDNSClass final {
 
   // Holds information about all the slots.
   Service slots_[MDNS_MAX_SERVICES];
-
-  // The singleton instance.
-  static MDNSClass instance_;
 };
 
 }  // namespace network
@@ -174,4 +175,4 @@ class MDNSClass final {
 
 #endif  // LWIP_MDNS_RESPONDER
 
-#endif  // QNE_MDNS_H_
+#endif  // QNETHERNET_MDNS_H_

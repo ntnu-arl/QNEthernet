@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernet.h defines an Arduino-style Ethernet driver for Teensy 4.1.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_ETHERNET_H_
-#define QNE_ETHERNET_H_
+#ifndef QNETHERNET_ETHERNET_H_
+#define QNETHERNET_ETHERNET_H_
 
 // C++ includes
 #include <cstddef>
@@ -28,6 +28,7 @@
 #include "lwip/opt.h"
 #include "lwip_t41.h"
 #include "util/PrintUtils.h"
+#include "util/ip_tools.h"
 
 namespace qindesign {
 namespace network {
@@ -61,15 +62,11 @@ class EthernetClass final {
   static constexpr int kMACAddrSize = 6;
 
   // Accesses the singleton instance.
-  static EthernetClass &instance() {
-    return instance_;
-  }
+  static EthernetClass &instance();
 
   // EthernetClass is neither copyable nor movable
   EthernetClass(const EthernetClass &) = delete;
   EthernetClass &operator=(const EthernetClass &) = delete;
-
-  ~EthernetClass();
 
   // Returns the maximum number of multicast groups. Note that mDNS will use
   // one group.
@@ -96,7 +93,7 @@ class EthernetClass final {
   void setMACAddress(const uint8_t mac[6]);
 
   // Call often.
-  static void loop();
+  void loop();
 
   // Starts Ethernet and a DHCP client. This returns whether starting the DHCP
   // client was successful. Note that when this returns, an IP address may not
@@ -104,6 +101,11 @@ class EthernetClass final {
   //
   // See: waitForLocalIP(timeout)
   bool begin();
+
+  // Returns whether DHCP is active.
+  bool isDHCPActive() const {
+    return dhcpActive_;
+  }
 
   // Waits, up to the specified timeout, for an IP address and returns whether
   // one was acquired. The timeout is in milliseconds.
@@ -146,22 +148,38 @@ class EthernetClass final {
   // Returns the link state, true for link and false for no link.
   bool linkState() const;
 
-  // Returns the link speed in Mbps.
+  // Returns the link speed in Mbps. This is only valid if the link is up.
   int linkSpeed() const;
 
-  // Returns the link duplex mode, true for full and false for half.
+  // Returns the link duplex mode, true for full and false for half. This is
+  // only valid if the link is up.
   bool linkIsFullDuplex() const;
 
   // Sets a link state callback.
+  //
+  // Note that no network tasks should be done from inside the listener.
   void onLinkState(std::function<void(bool state)> cb) {
     linkStateCB_ = cb;
   }
 
   // Sets an address changed callback. This will be called if any of the three
-  // addresses changed.
+  // addresses changed: IP address, subnet mask, or gateway.
+  //
+  // Note that no network tasks should be done from inside the listener.
   void onAddressChanged(std::function<void()> cb) {
     addressChangedCB_ = cb;
   }
+
+  // Sets an interface status callback. This will be called AFTER the interface
+  // is up but BEFORE the interface goes down.
+  //
+  // Note that no network tasks should be done from inside the listener.
+  void onInterfaceStatus(std::function<void(bool status)> cb) {
+    interfaceStatusCB_ = cb;
+  }
+
+  // Returns the interface status, true for UP and false for DOWN.
+  bool interfaceStatus() const;
 
   IPAddress localIP() const;
   IPAddress subnetMask() const;
@@ -242,6 +260,8 @@ class EthernetClass final {
   explicit operator bool() const;
 
  private:
+  static constexpr uint32_t kPollInterval = 125;  // About 8 times a second
+
   // Creates a new network interface. This sets the MAC address to the built-in
   // MAC address. This calls the other constructor with a NULL address.
   EthernetClass();
@@ -250,6 +270,8 @@ class EthernetClass final {
   // address. If the given address is NULL then this uses the built-in
   // MAC address.
   EthernetClass(const uint8_t mac[6]);
+
+  ~EthernetClass();
 
   static void netifEventFunc(struct netif *netif, netif_nsc_reason_t reason,
                              const netif_ext_callback_args_t *args);
@@ -260,7 +282,7 @@ class EthernetClass final {
              const ip4_addr_t *netmask,
              const ip4_addr_t *gw);
 
-  static elapsedMillis loopTimer_;
+  elapsedMillis pollTimer_;
 
   uint8_t mac_[6];
 #if LWIP_NETIF_HOSTNAME
@@ -268,12 +290,12 @@ class EthernetClass final {
 #endif
   struct netif *netif_ = nullptr;
 
+  bool dhcpActive_ = false;
+
   // Callbacks
   std::function<void(bool state)> linkStateCB_ = nullptr;
   std::function<void()> addressChangedCB_ = nullptr;
-
-  // The singleton instance.
-  static EthernetClass instance_;
+  std::function<void(bool status)> interfaceStatusCB_ = nullptr;
 };
 
 // Instance for interacting with the library.
@@ -284,10 +306,10 @@ extern EthernetClass &Ethernet;
 extern MDNSClass &MDNS;
 #endif  // LWIP_MDNS_RESPONDER
 
-#ifndef QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#ifdef QNETHERNET_ENABLE_RAW_FRAME_SUPPORT
 // Instance for using raw Ethernet frames.
 extern EthernetFrameClass &EthernetFrame;
-#endif  // !QNETHERNET_DISABLE_RAW_FRAME_SUPPORT
+#endif  // QNETHERNET_ENABLE_RAW_FRAME_SUPPORT
 
 // Instance for using IEEE 1588 functions.
 extern EthernetIEEE1588Class &EthernetIEEE1588;
@@ -302,4 +324,4 @@ extern Print *stderrPrint;
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_ETHERNET_H_
+#endif  // QNETHERNET_ETHERNET_H_

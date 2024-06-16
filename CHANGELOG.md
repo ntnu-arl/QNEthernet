@@ -6,7 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.18.0]
+
+### Added
+* Added a "Notes on ordering and timing" section to the README.
+* Added a README section that discusses `EthernetClient::connect()` and its
+  return values.
+* Added non-blocking TCP connection functions, `connectNoWait()`, that are
+  equivalent to the `connect()` functions but don't wait for the connection
+  to complete.
+* Added `EthernetUDP::beginWithReuse()` and `beginMulticastWithReuse()`
+  functions to replace the corresponding begin-with-_reuse_-parameter versions.
+* Added printing the link speed and duplex in the IPerfServer example.
+* Added an "Asynchronous use is not supported" section to the README.
+* New `EthernetClass::onInterfaceStatus(callback)` and `interfaceStatus()`
+  functions for tracking the network interface status.
+* Added a check to ensure lwIP isn't called from an interrupt context.
+
+### Changed
+* Wrapped `LWIP_MDNS_RESPONDER` option in `lwipopts.h` with `#ifndef` and added
+  it to the README.
+* Made `EthernetClass::loop()` non-static.
+* Changed serial output in examples to use CRLF line endings.
+* Changed `EthernetClient::connect()` internals to call `close()` instead of
+  `stop()` so that any cleanup doesn't block.
+* Updated `EthernetClient::connect()` to return some of the error codes defined
+  at [Ethernet - client.connect()](https://www.arduino.cc/reference/en/libraries/ethernet/client.connect/).
+* Changed `EthernetServer::begin()`-with-Boolean-_reuse_-parameters to be named
+  `beginWithReuse()`. This avoids too many overloads with mysterious
+  Boolean arguments.
+* Changed `EthernetServer::operator bool()` to be `const`.
+* Changed `EthernetServer::end()` to return `void` instead of `bool`.
+* Changed `MDNSClass::begin(hostname)` and `DNSClient::getHostByName()` to treat
+  a NULL hostname as an error; they now explicitly return false in this case.
+* Changed `MDNSClass::end()` to return `void` instead of `bool`.
+* Changed examples that use `unsigned char` to use `uint8_t` in
+  appropriate places.
+* `EthernetUDP::begin` functions now call `stop()` if the socket is listening
+  and the parameters have changed.
+* `MDNSClass::begin(hostname)` now calls `end()` if the responder is running and
+  the hostname changed.
+* Changed both `EthernetServer` and `EthernetUDP` to disallow copying but
+  allow moving.
+* Changed raw frame support to be excluded by default. This changed the
+  `QNETHERNET_DISABLE_RAW_FRAME_SUPPORT` macro to
+  `QNETHERNET_ENABLE_RAW_FRAME_SUPPORT`.
+* Changed `tcp_pcb` member accesses to use appropriate TCP API function calls.
+  This fixes use of the altcp API.
+
+### Removed
+* `EthernetServer` and `EthernetUDP` begin functions that take a Boolean
+  `reuse` parameter.
+
+### Fixed
+* `EthernetUDP::begin` functions now call `stop()` if there was a bind error.
+* Fixed `EthernetClient::setNoDelay(flag)` to actually use the `flag` argument.
+  The function was always setting the TCP flag, regardless of the value of
+  the argument.
+* Fixed printing unknown netif name characters in some debug messages.
+* Fixed `EthernetClient::connect()` and `close()` operations to check the
+  internal connection object for NULL across `yield()` calls.
+* Fixed `lwip_strerr()` buffer size to include the potential sign.
+* Don't close the TCP pcb on error since it's already been freed.
+
+## [0.17.0]
 
 ### Added
 * The library now, by default, puts the RX and TX buffers in RAM2 (DMAMEM).
@@ -23,9 +86,15 @@ and this project adheres to
 * Added a way to disable raw frame support: define the new
   `QNETHERNET_DISABLE_RAW_FRAME_SUPPORT` macro.
 * Added a "Complete list of features" section to the README.
-* Added `MDNSClass::hostname()` for the returning the hostname of the responder,
+* Added `MDNSClass::hostname()` for returning the hostname of the responder,
   if running.
 * Added `EthernetUDP::operator bool()`.
+* Added an already-started check to `MDNSClass`.
+* New section in the README: "`operator bool()` and `explicit`". It addresses
+  problems that may arise with `explicit operator bool()`.
+* Added `EthernetClient::connectionId()` for identifying connections across
+  possibly multiple `EthernetClient` objects.
+* Added `EthernetClass::isDHCPActive()`.
 
 ### Changed
 * Improved error code messages in `lwip_strerr(err)`. This is used when
@@ -37,6 +106,10 @@ and this project adheres to
   `const char *` instead.
 * Made all `operator bool()` functions `explicit`.
   See: https://en.cppreference.com/w/cpp/language/implicit_conversion#The_safe_bool_problem
+* `MDNSClass::removeService()` now returns `false` instead of `true` if mDNS has
+  not been started.
+* Enable definition of certain macros in `lwipopts.h` from the command line.
+* Changed API uses of `unsigned char` to `uint8_t`, for consistency.
 
 ### Removed
 * Removed the `QNETHERNET_FRAME_QUEUE_SIZE` macro and replaced it with
@@ -133,7 +206,7 @@ and this project adheres to
 * Changed `_write()` (stdio) to do nothing if the requested length is zero
   because that's what `fwrite()` is specified to do.
 * Updated examples to use new `operator!=()` for `IPAddress`.
-* Moved lwIP's heap to RAM2 (DMAMEM).
+* Moved lwIP's heap to RAM2 (DMAMEM) and increased `MEM_SIZE` back to 24000.
 * Updated `EthernetFrame`-related documentation to explain that the API doesn't
   receive any known Ethernet frame types, including IPv4, ARP, and IPv6
   (if enabled).
@@ -141,6 +214,7 @@ and this project adheres to
 * Changed `EthernetClass::setMACAddress(mac)` parameter to `const`.
 * Moved CRC-32 lookup table to RAM2 (DMAMEM).
 * Made const those functions which could be made const.
+* Renamed `ServerWithAddressListener` example to `ServerWithListeners`.
 * Updated examples and README to consider listeners and their relationship with
   a static IP and link detection.
 
@@ -510,4 +584,4 @@ and this project adheres to
 
 ---
 
-Copyright (c) 2021-2022 Shawn Silverman
+Copyright (c) 2021-2023 Shawn Silverman

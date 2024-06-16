@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNDNSClient.cpp implements DNSClient.
@@ -43,7 +43,7 @@ IPAddress DNSClient::getServer(int index) {
 
 bool DNSClient::getHostByName(const char *hostname,
                               std::function<void(const ip_addr_t *)> callback) {
-  if (callback == nullptr) {
+  if (callback == nullptr || hostname == nullptr) {
     return false;
   }
 

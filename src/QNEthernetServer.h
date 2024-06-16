@@ -1,13 +1,14 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetServer.h defines the TCP server interface.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_ETHERNETSERVER_H_
-#define QNE_ETHERNETSERVER_H_
+#ifndef QNETHERNET_ETHERNETSERVER_H_
+#define QNETHERNET_ETHERNETSERVER_H_
 
 // C++ includes
+#include <cstddef>
 #include <cstdint>
 
 #include <Print.h>
@@ -22,7 +23,13 @@ namespace network {
 class EthernetServer : public Server {
  public:
   EthernetServer();
-  EthernetServer(uint16_t port);
+  explicit EthernetServer(uint16_t port);
+
+  // Disallow copying but allow moving
+  EthernetServer(const EthernetServer &) = delete;
+  EthernetServer &operator=(const EthernetServer &) = delete;
+  EthernetServer(EthernetServer &&) = default;
+  EthernetServer &operator=(EthernetServer &&) = default;
 
   ~EthernetServer();
 
@@ -38,33 +45,36 @@ class EthernetServer : public Server {
     return port_;
   }
 
-  // Starts listening on the server port, if set. This calls begin(false).
+  // Starts listening on the server port, if set. This does not set the
+  // SO_REUSEADDR socket option.
+  //
+  // This first calls end() if the _reuse_ socket option differs.
   void begin() final;
 
   // Starts listening on the server port, if set, and sets the SO_REUSEADDR
-  // socket option according to the `reuse` parameter. This returns whether the
-  // server started listening. This will always return false if the port is
-  // not set.
-  bool begin(bool reuse);
-
-  // Starts listening on the specified port. This calls begin(port, false).
+  // socket option. This returns whether the server started listening. This will
+  // always return false if the port is not set.
   //
-  // If the port is already set and the server is listening, then it is first
-  // stopped with a call to end().
+  // This first calls end() if the _reuse_ socket option differs.
+  bool beginWithReuse();
+
+  // Starts listening on the specified port. This does not set the SO_REUSEADDR
+  // socket option. This returns whether the server started listening.
+  //
+  // This first calls end() if the port or _reuse_ socket option differ.
   bool begin(uint16_t port);
 
   // Starts listening on the specified port, if set, and sets the SO_REUSEADDR
-  // socket option according to the `reuse` parameter. This returns whether the
-  // server started listening.
+  // socket option. This returns whether the server started listening.
   //
-  // If the port is already set and the server is listening, then it is first
-  // stopped with a call to end(). This is to prevent a single server object
-  // from representing more than one listening socket.
-  bool begin(uint16_t port, bool reuse);
+  // If the port or _reuse_ socket option differ then this first calls end() to
+  // prevent a single server object from representing more than one
+  // listening socket.
+  bool beginWithReuse(uint16_t port);
 
-  // Stops listening and returns whether the server is stopped. This will always
-  // return true if the port is not set.
-  bool end();
+  // Stops listening. This does nothing if the port is not set or the server is
+  // not listening.
+  void end();
 
   // Accepts a connection and returns a client, possibly unconnected. This
   // returns an unconnected client if the port is not set.
@@ -92,15 +102,18 @@ class EthernetServer : public Server {
   // Flushes all the connections, but does nothing is the port is not set.
   void flush() final;
 
-  explicit operator bool();
+  explicit operator bool() const;
 
  private:
+  bool begin(uint16_t port, bool reuse);
+
   int32_t port_;  // We also want to be able to represent a signed value
                   // Non-negative is 16 bits
+  bool reuse_;    // Whether the SO_REUSEADDR socket option is set
   bool listening_;
 };
 
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_ETHERNETSERVER_H_
+#endif  // QNETHERNET_ETHERNETSERVER_H_

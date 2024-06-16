@@ -1,13 +1,14 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetUDP.h defines the UDP interface.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_ETHERNETUDP_H_
-#define QNE_ETHERNETUDP_H_
+#ifndef QNETHERNET_ETHERNETUDP_H_
+#define QNETHERNET_ETHERNETUDP_H_
 
 // C++ includes
+#include <cstddef>
 #include <cstdint>
 #include <ctime>
 #include <vector>
@@ -30,6 +31,12 @@ class EthernetUDP : public UDP {
   // to a minimum of 1.
   explicit EthernetUDP(size_t queueSize);
 
+  // Disallow copying but allow moving
+  EthernetUDP(const EthernetUDP &) = delete;
+  EthernetUDP &operator=(const EthernetUDP &) = delete;
+  EthernetUDP(EthernetUDP &&) = default;
+  EthernetUDP &operator=(EthernetUDP &&) = default;
+
   ~EthernetUDP();
 
   // Returns the maximum number of UDP sockets.
@@ -39,16 +46,22 @@ class EthernetUDP : public UDP {
 
   // Starts listening on a port. This returns true if successful and false if
   // the port is in use. This calls begin(localPort, false).
+  //
+  // This first calls stop() if the socket is already listening and the port or
+  // _reuse_ socket option differ.
   uint8_t begin(uint16_t localPort) final;
 
-  // Starts listening on a port and sets the SO_REUSEADDR socket option
-  // according to the `reuse` parameter. This returns whether the attempt
-  // was successful.
-  uint8_t begin(uint16_t localPort, bool reuse);
+  // Starts listening on a port and sets the SO_REUSEADDR socket option. This
+  // returns whether the attempt was successful.
+  //
+  // This first calls stop() if the socket is already listening and the port or
+  // _reuse_ socket option differ.
+  uint8_t beginWithReuse(uint16_t localPort);
 
-  // Multicast functions make use of Ethernet.joinGroup()
+  // Multicast functions make use of Ethernet.joinGroup(). These first call the
+  // appropriate `begin` functions.
   uint8_t beginMulticast(IPAddress ip, uint16_t port) final;
-  uint8_t beginMulticast(IPAddress ip, uint16_t port, bool reuse);
+  uint8_t beginMulticastWithReuse(IPAddress ip, uint16_t port);
 
   // Returns the port to which this socket is bound, or zero if it is not bound.
   uint16_t localPort();
@@ -83,7 +96,7 @@ class EthernetUDP : public UDP {
 
   // A NULL buffer allows the caller to skip bytes without having to read into
   // a buffer.
-  int read(unsigned char *buffer, size_t len) final;
+  int read(uint8_t *buffer, size_t len) final;
 
   // A NULL buffer allows the caller to skip bytes without having to read into
   // a buffer.
@@ -98,7 +111,7 @@ class EthernetUDP : public UDP {
 
   // Returns a pointer to the received packet data. This is only valid if a
   // packet has been received with parsePacket().
-  const unsigned char *data() const;
+  const uint8_t *data() const;
 
   IPAddress remoteIP() final;
   uint16_t remotePort() final;
@@ -112,8 +125,8 @@ class EthernetUDP : public UDP {
   bool timestamp(timespec &timestamp) const;
 
  private:
-  struct Packet {
-    std::vector<unsigned char> data;
+  struct Packet final {
+    std::vector<uint8_t> data;
     ip_addr_t addr = *IP_ANY_TYPE;
     volatile uint16_t port = 0;
     volatile bool hasTimestamp = false;
@@ -122,6 +135,14 @@ class EthernetUDP : public UDP {
 
   static void recvFunc(void *arg, struct udp_pcb *pcb, struct pbuf *p,
                        const ip_addr_t *addr, u16_t port);
+
+  // Starts listening on a port and sets the SO_REUSEADDR socket option
+  // according to the `reuse` parameter. This returns whether the attempt
+  // was successful.
+  bool begin(uint16_t localPort, bool reuse);
+
+  // Multicast functions make use of Ethernet.joinGroup()
+  bool beginMulticast(IPAddress ip, uint16_t port, bool reuse);
 
   // ip_addr_t versions of transmission functions
   bool beginPacket(const ip_addr_t *ipaddr, uint16_t port);
@@ -132,6 +153,10 @@ class EthernetUDP : public UDP {
   bool isAvailable() const;
 
   udp_pcb *pcb_;
+
+  // Listening parameters
+  bool listening_;
+  bool listenReuse_;
 
   // Received packet; updated every time one is received
   std::vector<Packet> inBuf_;  // Holds received packets
@@ -151,4 +176,4 @@ class EthernetUDP : public UDP {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_ETHERNETUDP_H_
+#endif  // QNETHERNET_ETHERNETUDP_H_

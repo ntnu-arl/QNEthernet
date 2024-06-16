@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // AppWithListenersTemplate shows one way to start writing a network
@@ -6,13 +6,14 @@
 // communication, but it configures the network and shows possible
 // places to hook in your own code.
 //
-// Not everything in this template needs to be included in your own
+// Not everything in this template needs to be included in your
 // own application.
 //
 // This demonstrates:
 // 1. Using Ethernet listeners,
-// 2. Using `printf`, and
-// 3. Configuring an IP address.
+// 2. Using `printf`,
+// 3. Configuring an IP address, and
+// 4. How to properly start using the network.
 //
 // This file is part of the QNEthernet library.
 
@@ -64,11 +65,17 @@ IPAddress gateway{192, 168, 1, 1};
 IPAddress dnsServer = gateway;
 
 // --------------------------------------------------------------------------
-//  Main program
+//  Program State
+// --------------------------------------------------------------------------
+
+volatile bool networkReadyLatch = false;
+
+// --------------------------------------------------------------------------
+//  Main Program
 // --------------------------------------------------------------------------
 
 // Forward declarations
-void systemReady(bool hasIP, bool hasLink);
+void setNetworkReady(bool hasIP, bool hasLink, bool interfaceUp);
 
 // Main program setup.
 void setup() {
@@ -83,14 +90,14 @@ void setup() {
     CrashReport.clear();
   }
   stdPrint = &Serial;  // Make printf work (a QNEthernet feature)
-  printf("Starting...\n");
+  printf("Starting...\r\n");
 
   // Unlike the Arduino API (which you can still use), QNEthernet uses
   // the Teensy's internal MAC address by default, so we can retrieve
   // it here
   uint8_t mac[6];
   Ethernet.macAddress(mac);  // This is informative; it retrieves, not sets
-  printf("MAC = %02x:%02x:%02x:%02x:%02x:%02x\n",
+  printf("MAC = %02x:%02x:%02x:%02x:%02x:%02x\r\n",
          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
   // Add listeners
@@ -99,12 +106,12 @@ void setup() {
 
   // Listen for link changes
   Ethernet.onLinkState([](bool state) {
-    printf("[Ethernet] Link %s\n", state ? "ON" : "OFF");
+    printf("[Ethernet] Link %s\r\n", state ? "ON" : "OFF");
 
     // When setting a static IP, the address will be set but a link
     // might not yet exist
     bool hasIP = (Ethernet.localIP() != INADDR_NONE);
-    systemReady(hasIP, state);
+    setNetworkReady(hasIP, state, Ethernet.interfaceStatus());
   });
 
   // Listen for address changes
@@ -112,7 +119,6 @@ void setup() {
     IPAddress ip = Ethernet.localIP();
     bool hasIP = (ip != INADDR_NONE);
     if (hasIP) {
-      IPAddress ip = Ethernet.localIP();
       IPAddress subnet = Ethernet.subnetMask();
       IPAddress gw = Ethernet.gatewayIP();
       IPAddress dns = Ethernet.dnsServerIP();
@@ -120,17 +126,17 @@ void setup() {
       //       (zero) when setting a static IP, it must be set first
 
       printf(
-          "[Ethernet] Address changed:\n"
-          "    Local IP = %u.%u.%u.%u\n"
-          "    Subnet   = %u.%u.%u.%u\n"
-          "    Gateway  = %u.%u.%u.%u\n"
-          "    DNS      = %u.%u.%u.%u\n",
+          "[Ethernet] Address changed:\r\n"
+          "    Local IP = %u.%u.%u.%u\r\n"
+          "    Subnet   = %u.%u.%u.%u\r\n"
+          "    Gateway  = %u.%u.%u.%u\r\n"
+          "    DNS      = %u.%u.%u.%u\r\n",
           ip[0], ip[1], ip[2], ip[3],
           subnet[0], subnet[1], subnet[2], subnet[3],
           gw[0], gw[1], gw[2], gw[3],
           dns[0], dns[1], dns[2], dns[3]);
     } else {
-      printf("[Ethernet] Address changed: No IP address\n");
+      printf("[Ethernet] Address changed: No IP address\r\n");
     }
 
     // Tell interested parties the state of the IP address and system
@@ -138,7 +144,15 @@ void setup() {
     // sub-programs that need to know whether to stop/start/restart/etc
     // Note: When setting a static IP, the address will be set but a
     //       link might not yet exist
-    systemReady(hasIP, Ethernet.linkState());
+    setNetworkReady(hasIP, Ethernet.linkState(), Ethernet.interfaceStatus());
+  });
+
+  // Listen for network interface status changes
+  Ethernet.onInterfaceStatus([](bool status) {
+    // When setting a static IP, the address will be set but the
+    // network interface might not yet be up
+    bool hasIP = (Ethernet.localIP() != INADDR_NONE);
+    setNetworkReady(hasIP, Ethernet.linkState(), Ethernet.interfaceStatus());
   });
 
   bool startWithStatic = false;
@@ -149,40 +163,40 @@ void setup() {
   if (kStartWithDHCP) {
     // Option 1 - Always start with DHCP
 
-    printf("Starting Ethernet with DHCP...\n");
+    printf("Starting Ethernet with DHCP...\r\n");
     if (Ethernet.begin()) {
       if (kWaitForDHCP) {
         // Option 1.1 - Wait for a DHCP-assigned address
 
         if (!Ethernet.waitForLocalIP(kDHCPTimeout)) {
-          printf("No address from DHCP; setting static IP...\n");
+          printf("No address from DHCP; setting static IP...\r\n");
           startWithStatic = true;
         }
       } else {
         // Option 1.2 - Don't wait for DHCP
       }
     } else {
-      printf("Error: DHCP not started\n");
+      printf("Error: DHCP not started\r\n");
       startWithStatic = true;
     }
 
     if (startWithStatic && staticIP == INADDR_NONE) {
-      printf("Error: No static IP\n");
+      printf("Error: No static IP\r\n");
       return;
     }
   } else {
     // Option 2 - staticIP determines
 
     if (staticIP == INADDR_NONE) {
-      printf("Starting Ethernet with DHCP...\n");
+      printf("Starting Ethernet with DHCP...\r\n");
       if (!Ethernet.begin()) {
-        printf("Error: DHCP not started\n");
+        printf("Error: DHCP not started\r\n");
         return;
       }
 
       if (kWaitForDHCP) {
         if (!Ethernet.waitForLocalIP(kDHCPTimeout)) {
-          printf("Warning: No address from DHCP\n");
+          printf("Warning: No address from DHCP\r\n");
           // An address could still come in later
         }
       }
@@ -193,7 +207,7 @@ void setup() {
 
   // At this point, a static IP is set to a valid value
   if (startWithStatic) {
-    printf("Starting Ethernet with static IP...\n");
+    printf("Starting Ethernet with static IP...\r\n");
     Ethernet.setDNSServerIP(dnsServer);  // Set first so that the
                                          // listener sees it
     Ethernet.begin(staticIP, subnetMask, gateway);
@@ -202,7 +216,7 @@ void setup() {
     // but the link may not be up; optionally wait for the link here
     if (kLinkTimeout > 0) {
       if (!Ethernet.waitForLink(kLinkTimeout)) {
-        printf("Warning: No link detected\n");
+        printf("Warning: No link detected\r\n");
         // We may still see a link later, after the timeout, so
         // continue instead of returning
       }
@@ -212,20 +226,35 @@ void setup() {
   // *** Additional setup code goes here
 }
 
-// This is called when the system readiness has changed. The system is
-// considered ready if there's an IP address and the link is up.
-void systemReady(bool hasIP, bool hasLink) {
-  printf("System is%s ready\n", (hasIP && hasLink) ? "" : " not");
+// This is called when the network readiness has changed. The network
+// is considered ready if there's an IP address and the link and network
+// interface are up.
+void setNetworkReady(bool hasIP, bool hasLink, bool interfaceUp) {
+  networkReadyLatch = hasIP && hasLink && interfaceUp;
 
-  // *** Notification or start/stop/restart code goes here
+  printf("Network is%s READY\r\n", networkReadyLatch ? "" : " NOT");
 
-  // For servers, it is suggested to follow the address state because
-  // they can be brought up and active even when there's no link,
-  // unlike clients and connections, which require both an address and
-  // a link.
+  // To successfully perform network startup tasks, test the latch
+  // somewhere in the main loop, and, if it is true, perform any
+  // network tasks and then set the latch to false. No network calls
+  // should be done from inside a listener.
+
+  // Similar logic could be applied for when the network is not ready.
+
+  // Servers technically only need the address state because they can
+  // be brought up and active even when there's no link or no active
+  // network interface, unlike clients and connections, which require
+  // all of an address, link, and active network interface.
 }
 
 // Main program loop.
 void loop() {
   // *** Main program code goes here
+
+  // Perform any network startup:
+  if (networkReadyLatch) {
+    // *** Do any network startup tasks that must run when the network
+    // *** comes up
+    networkReadyLatch = false;
+  }
 }

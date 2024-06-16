@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // lwIP configuration for QNEthernet library on Teensy 4.1.
 // This file is part of the QNEthernet library.
 
-#ifndef LWIPTEENSY_LWIPOPTS_H_
-#define LWIPTEENSY_LWIPOPTS_H_
+#ifndef QNETHERNET_LWIPOPTS_H_
+#define QNETHERNET_LWIPOPTS_H_
 
 // NO SYS
 #define NO_SYS             1
@@ -18,13 +18,17 @@
 // #define LWIP_TCPIP_CORE_LOCKING       1
 // #define LWIP_TCPIP_CORE_LOCKING_INPUT 0
 #define SYS_LIGHTWEIGHT_PROT          0
+void sys_check_core_locking(void);
+#define LWIP_ASSERT_CORE_LOCKED() sys_check_core_locking()
 
 // Memory options
 // #define MEM_LIBC_MALLOC                        0
 // #define MEMP_MEM_MALLOC                        0
 // #define MEMP_MEM_INIT                          0
 #define MEM_ALIGNMENT                          4
+#ifndef MEM_SIZE
 #define MEM_SIZE                               24000
+#endif  // !MEM_SIZE
 // #define MEMP_OVERFLOW_CHECK                    0
 // #define MEMP_SANITY_CHECK                      0
 // #define MEM_OVERFLOW_CHECK                     0
@@ -42,15 +46,23 @@ extern void *ram_heap;
 // #define MEMP_NUM_PBUF                      16
 // #define MEMP_NUM_RAW_PCB                   4
 // Add one to MEMP_NUM_UDP_PCB for mDNS:
+#ifndef MEMP_NUM_UDP_PCB
 #define MEMP_NUM_UDP_PCB                   8
+#endif  // !MEMP_NUM_UDP_PCB
+#ifndef MEMP_NUM_TCP_PCB
 #define MEMP_NUM_TCP_PCB                   8
+#endif  // !MEMP_NUM_TCP_PCB
+// #ifndef MEMP_NUM_TCP_PCB_LISTEN
 // #define MEMP_NUM_TCP_PCB_LISTEN            8
+// #endif  // !MEMP_NUM_TCP_PCB_LISTEN
 // #define MEMP_NUM_TCP_SEG                   16
 // #define MEMP_NUM_ALTCP_PCB                 MEMP_NUM_TCP_PCB
 // #define MEMP_NUM_REASSDATA                 5
 // #define MEMP_NUM_FRAG_PBUF                 15
 // #define MEMP_NUM_ARP_QUEUE                 30
+#ifndef MEMP_NUM_IGMP_GROUP
 #define MEMP_NUM_IGMP_GROUP                9
+#endif  // !MEMP_NUM_IGMP_GROUP
 /* #define LWIP_NUM_SYS_TIMEOUT_INTERNAL                                 \
 //   (LWIP_TCP + IP_REASSEMBLY + LWIP_ARP + (2 * LWIP_DHCP) + LWIP_ACD + \
 //    LWIP_IGMP + LWIP_DNS + PPP_NUM_TIMEOUTS +                          \
@@ -138,7 +150,9 @@ extern void *ram_heap;
 // #define DNS_TABLE_SIZE                4
 // #define DNS_MAX_NAME_LENGTH           256
 // #define DNS_MAX_SERVERS               2
+// #ifndef DNS_MAX_RETRIES
 // #define DNS_MAX_RETRIES               4
+// #endif  // !DNS_MAX_RETRIES
 // #define DNS_DOES_NAME_CHECK           1
 /* #define LWIP_DNS_SECURE                                                 \
 //   (LWIP_DNS_SECURE_RAND_XID | LWIP_DNS_SECURE_NO_MULTIPLE_OUTSTANDING | \
@@ -209,10 +223,9 @@ extern void *ram_heap;
 #define LWIP_SINGLE_NETIF              1
 #define LWIP_NETIF_HOSTNAME            1
 // #define LWIP_NETIF_API                 0
-#define LWIP_NETIF_STATUS_CALLBACK     1
-// For mDNS:
+// #define LWIP_NETIF_STATUS_CALLBACK     0
 #define LWIP_NETIF_EXT_STATUS_CALLBACK 1
-#define LWIP_NETIF_LINK_CALLBACK       1
+// #define LWIP_NETIF_LINK_CALLBACK       0
 // #define LWIP_NETIF_REMOVE_CALLBACK     0
 // #define LWIP_NETIF_HWADDRHINT          0
 // #define LWIP_NETIF_TX_SINGLE_PBUF      0
@@ -307,7 +320,9 @@ extern void *ram_heap;
 // #define LWIP_CHECKSUM_ON_COPY        0
 
 // IPv6 options
+// #ifndef LWIP_IPV6
 // #define LWIP_IPV6                       0
+// #endif  // !LWIP_IPV6
 // #define IPV6_REASS_MAXAGE               60
 // #define LWIP_IPV6_SCOPES                (LWIP_IPV6 && !LWIP_SINGLE_NETIF)
 // #define LWIP_IPV6_SCOPES_DEBUG          0
@@ -420,9 +435,13 @@ extern void *ram_heap;
   } while (0)
 
 // MDNS options
+#ifndef LWIP_MDNS_RESPONDER
 #define LWIP_MDNS_RESPONDER LWIP_UDP
+#endif  // !LWIP_MDNS_RESPONDER
 // #define MDNS_RESP_USENETIF_EXTCALLBACK LWIP_NETIF_EXT_STATUS_CALLBACK
+#ifndef MDNS_MAX_SERVICES
 #define MDNS_MAX_SERVICES   3
+#endif  // !MDNS_MAX_SERVICES
 // #define MDNS_DEBUG                       LWIP_DBG_OFF
 
-#endif  // LWIPTEENSY_LWIPOPTS_H_
+#endif  // QNETHERNET_LWIPOPTS_H_

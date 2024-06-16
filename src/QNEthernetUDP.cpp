@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetUDP.cpp contains the EthernetUDP implementation.
@@ -48,7 +48,7 @@ void EthernetUDP::recvFunc(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     packet.data.reserve(p->tot_len);
     // TODO: Limit vector size
     while (p != nullptr) {
-      unsigned char *data = reinterpret_cast<unsigned char *>(p->payload);
+      uint8_t *data = reinterpret_cast<uint8_t *>(p->payload);
       packet.data.insert(packet.data.end(), &data[0], &data[p->len]);
       p = p->next;
     }
@@ -76,6 +76,8 @@ EthernetUDP::EthernetUDP() : EthernetUDP(1) {}
 
 EthernetUDP::EthernetUDP(size_t queueSize)
     : pcb_(nullptr),
+      listening_(false),
+      listenReuse_(false),
       inBuf_(queueSize < 1 ? 1 : queueSize),
       packetPos_(-1),
       hasOutPacket_(false) {}
@@ -88,7 +90,17 @@ uint8_t EthernetUDP::begin(uint16_t localPort) {
   return begin(localPort, false);
 }
 
-uint8_t EthernetUDP::begin(uint16_t localPort, bool reuse) {
+uint8_t EthernetUDP::beginWithReuse(uint16_t localPort) {
+  return begin(localPort, true);
+}
+
+bool EthernetUDP::begin(uint16_t localPort, bool reuse) {
+  if (listening_) {
+    if (pcb_->local_port == localPort && listenReuse_ == reuse) {
+      return true;
+    }
+    stop();
+  }
   if (pcb_ == nullptr) {
     pcb_ = udp_new();
   }
@@ -101,8 +113,11 @@ uint8_t EthernetUDP::begin(uint16_t localPort, bool reuse) {
     ip_set_option(pcb_, SOF_REUSEADDR);
   }
   if (udp_bind(pcb_, IP_ANY_TYPE, localPort) != ERR_OK) {
+    stop();
     return false;
   }
+  listening_ = true;
+  listenReuse_ = reuse;
 
   for (Packet &p : inBuf_) {
     p.data.reserve(kMaxUDPSize);
@@ -120,8 +135,12 @@ uint8_t EthernetUDP::beginMulticast(IPAddress ip, uint16_t localPort) {
   return beginMulticast(ip, localPort, false);
 }
 
-uint8_t EthernetUDP::beginMulticast(IPAddress ip, uint16_t localPort,
-                                    bool reuse) {
+uint8_t EthernetUDP::beginMulticastWithReuse(IPAddress ip, uint16_t localPort) {
+  return beginMulticast(ip, localPort, true);
+}
+
+bool EthernetUDP::beginMulticast(IPAddress ip, uint16_t localPort,
+                                 bool reuse) {
   if (!begin(localPort, reuse)) {
     return false;
   }
@@ -146,6 +165,8 @@ void EthernetUDP::stop() {
   }
   udp_remove(pcb_);
   pcb_ = nullptr;
+  listening_ = false;
+  listenReuse_ = false;
 
   packet_.addr = *IP_ANY_TYPE;
   packet_.port = 0;
@@ -155,7 +176,7 @@ void EthernetUDP::stop() {
 }
 
 EthernetUDP::operator bool() const {
-  return (pcb_ != nullptr);
+  return listening_;
 }
 
 // --------------------------------------------------------------------------
@@ -181,7 +202,7 @@ int EthernetUDP::parsePacket() {
   inBufTail_ = (inBufTail_ + 1) % inBuf_.size();
   inBufSize_--;
 
-  EthernetClass::loop();  // Allow the stack to move along
+  Ethernet.loop();  // Allow the stack to move along
 
   packetPos_ = 0;
   return packet_.data.size();
@@ -206,7 +227,7 @@ int EthernetUDP::read() {
   return packet_.data[packetPos_++];
 }
 
-int EthernetUDP::read(unsigned char *buffer, size_t len) {
+int EthernetUDP::read(uint8_t *buffer, size_t len) {
   if (len == 0 || !isAvailable()) {
     return 0;
   }
@@ -219,7 +240,7 @@ int EthernetUDP::read(unsigned char *buffer, size_t len) {
 }
 
 int EthernetUDP::read(char *buffer, size_t len) {
-  return read(reinterpret_cast<unsigned char *>(buffer), len);
+  return read(reinterpret_cast<uint8_t *>(buffer), len);
 }
 
 int EthernetUDP::peek() {
@@ -239,7 +260,7 @@ size_t EthernetUDP::size() const {
   return packet_.data.size();
 }
 
-const unsigned char *EthernetUDP::data() const {
+const uint8_t *EthernetUDP::data() const {
   return packet_.data.data();
 }
 
