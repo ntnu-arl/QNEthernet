@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetClient.cpp contains the EthernetClient implementation.
@@ -16,7 +16,6 @@
 #include "QNEthernet.h"
 #include "internal/ConnectionManager.h"
 #include "lwip/dns.h"
-#include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 #include "lwip/tcp.h"
 #include "util/PrintUtils.h"
@@ -24,6 +23,20 @@
 
 namespace qindesign {
 namespace network {
+
+// connect() return values.
+// See: https://www.arduino.cc/reference/en/libraries/ethernet/client.connect/
+// Note: The example on that page is not correct. Because non-zero values,
+//       including negative values, are converted to a value of 'true' when
+//       using them as a bool, it assumes a successful connection even when
+//       connect() returns an error.
+enum class ConnectReturns {
+  SUCCESS = 1,
+  TIMED_OUT = -1,
+  INVALID_SERVER = -2,
+  TRUNCATED = -3,
+  INVALID_RESPONSE = -4,
+};
 
 // DNS lookup timeout.
 static constexpr uint32_t kDNSLookupTimeout =
@@ -36,8 +49,7 @@ EthernetClient::EthernetClient(std::shared_ptr<internal::ConnectionHolder> conn)
       conn_(conn) {}
 
 EthernetClient::~EthernetClient() {
-  // Questionable not to call stop(), but copy semantics demand that we don't
-  // stop();
+  // Questionable not to call close(), but copy semantics demand that we don't
 }
 
 // --------------------------------------------------------------------------
@@ -46,38 +58,54 @@ EthernetClient::~EthernetClient() {
 
 int EthernetClient::connect(IPAddress ip, uint16_t port) {
   ip_addr_t ipaddr IPADDR4_INIT(get_uint32(ip));
-  return connect(&ipaddr, port);
+  return connect(&ipaddr, port, true);
 }
 
 int EthernetClient::connect(const char *host, uint16_t port) {
   IPAddress ip;
   if (!DNSClient::getHostByName(host, ip, kDNSLookupTimeout)) {
-    return false;
+    return static_cast<int>(ConnectReturns::INVALID_SERVER);
   }
   return connect(ip, port);
 }
 
-bool EthernetClient::connect(const ip_addr_t *ipaddr, uint16_t port) {
-  // First close any existing connection
-  stop();
+int EthernetClient::connectNoWait(const IPAddress &ip, uint16_t port) {
+  ip_addr_t ipaddr IPADDR4_INIT(get_uint32(ip));
+  return connect(&ipaddr, port, false);
+}
+
+int EthernetClient::connectNoWait(const char *host, uint16_t port) {
+  IPAddress ip;
+  if (!DNSClient::getHostByName(host, ip, kDNSLookupTimeout)) {
+    return static_cast<int>(ConnectReturns::INVALID_SERVER);
+  }
+  return connectNoWait(ip, port);
+}
+
+int EthernetClient::connect(const ip_addr_t *ipaddr, uint16_t port, bool wait) {
+  // First close any existing connection (without waiting)
+  close();
 
   conn_ = internal::ConnectionManager::instance().connect(ipaddr, port);
   if (conn_ == nullptr) {
-    return false;
+    return 0;
   }
 
   // Wait for a connection
-  elapsedMillis timer;
-  while (!conn_->connected && timer < connTimeout_) {
-    // NOTE: Depends on Ethernet loop being called from yield()
-    yield();
-  }
-  if (!conn_->connected) {
-    stop();
-    return false;
+  if (wait) {
+    elapsedMillis timer;
+    // NOTE: conn_ could be set to NULL somewhere during the yield
+    while (conn_ != nullptr && !conn_->connected && timer < connTimeout_) {
+      // NOTE: Depends on Ethernet loop being called from yield()
+      yield();
+    }
+    if (conn_ == nullptr || !conn_->connected) {
+      close();
+      return static_cast<int>(ConnectReturns::TIMED_OUT);
+    }
   }
 
-  return true;
+  return static_cast<int>(ConnectReturns::SUCCESS);
 }
 
 uint8_t EthernetClient::connected() {
@@ -88,7 +116,7 @@ uint8_t EthernetClient::connected() {
     conn_ = nullptr;
     return false;
   }
-  EthernetClass::loop();  // Allow information to come in
+  Ethernet.loop();  // Allow information to come in
   return true;
 }
 
@@ -102,7 +130,7 @@ EthernetClient::operator bool() {
     }
     return false;
   }
-  EthernetClass::loop();  // Allow information to come in
+  Ethernet.loop();  // Allow information to come in
   return true;
 }
 
@@ -118,7 +146,11 @@ void EthernetClient::setNoDelay(bool flag) {
   if (state == nullptr) {
     return;
   }
-  state->pcb->flags |= TF_NODELAY;
+  if (flag) {
+    tcp_nagle_disable(state->pcb);
+  } else {
+    tcp_nagle_enable(state->pcb);
+  }
 }
 
 bool EthernetClient::isNoDelay() {
@@ -129,7 +161,7 @@ bool EthernetClient::isNoDelay() {
   if (state == nullptr) {
     return false;
   }
-  return ((state->pcb->flags & TF_NODELAY) != 0);
+  return tcp_nagle_disabled(state->pcb);
 }
 
 void EthernetClient::stop() {
@@ -156,7 +188,7 @@ void EthernetClient::close(bool wait) {
   if (conn_->connected) {
     // First try to flush any data
     tcp_output(state->pcb);
-    EthernetClass::loop();  // Maybe some TCP data gets in
+    Ethernet.loop();  // Maybe some TCP data gets in
     // NOTE: loop() requires a re-check of the state
 
     if (state != nullptr) {
@@ -164,7 +196,8 @@ void EthernetClient::close(bool wait) {
         tcp_abort(state->pcb);
       } else if (wait) {
         elapsedMillis timer;
-        while (conn_->connected && timer < connTimeout_) {
+        // NOTE: conn_ could be set to NULL somewhere during the yield
+        while (conn_ != nullptr && conn_->connected && timer < connTimeout_) {
           // NOTE: Depends on Ethernet loop being called from yield()
           yield();
         }
@@ -186,7 +219,7 @@ void EthernetClient::closeOutput() {
 
   // First try to flush any data
   tcp_output(state->pcb);
-  EthernetClass::loop();  // Maybe some TCP data gets in
+  Ethernet.loop();  // Maybe some TCP data gets in
   // NOTE: loop() requires a re-check of the state
 
   if (state != nullptr) {
@@ -215,7 +248,10 @@ uint16_t EthernetClient::localPort() {
   if (state == nullptr) {
     return 0;
   }
-  return state->pcb->local_port;
+
+  uint16_t port;
+  tcp_tcp_get_tcp_addrinfo(state->pcb, 1, nullptr, &port);
+  return port;
 }
 
 IPAddress EthernetClient::remoteIP() {
@@ -227,7 +263,10 @@ IPAddress EthernetClient::remoteIP() {
   if (state == nullptr) {
     return INADDR_NONE;
   }
-  return ip_addr_get_ip4_uint32(&state->pcb->remote_ip);
+
+  ip_addr_t ip;
+  tcp_tcp_get_tcp_addrinfo(state->pcb, 0, &ip, nullptr);
+  return ip_addr_get_ip4_uint32(&ip);
 }
 
 uint16_t EthernetClient::remotePort() {
@@ -239,7 +278,20 @@ uint16_t EthernetClient::remotePort() {
   if (state == nullptr) {
     return 0;
   }
-  return state->pcb->remote_port;
+
+  uint16_t port;
+  tcp_tcp_get_tcp_addrinfo(state->pcb, 0, nullptr, &port);
+  return port;
+}
+
+uintptr_t EthernetClient::connectionId() {
+  if (conn_ != nullptr && conn_->connected) {
+    const auto &state = conn_->state;
+    if (state != nullptr) {
+      return reinterpret_cast<uintptr_t>(state->pcb);
+    }
+  }
+  return 0;
 }
 
 // --------------------------------------------------------------------------
@@ -288,7 +340,7 @@ size_t EthernetClient::write(uint8_t b) {
       written = 1;
     }
   }
-  EthernetClass::loop();  // Loop to allow incoming TCP data
+  Ethernet.loop();  // Loop to allow incoming TCP data
   return written;
 }
 
@@ -303,7 +355,7 @@ size_t EthernetClient::write(const uint8_t *buf, size_t size) {
   }
 
   if (size == 0) {
-    EthernetClass::loop();  // Loop to allow incoming TCP data
+    Ethernet.loop();  // Loop to allow incoming TCP data
     return 0;
   }
 
@@ -319,7 +371,7 @@ size_t EthernetClient::write(const uint8_t *buf, size_t size) {
     }
   }
 
-  EthernetClass::loop();  // Loop to allow incoming TCP data
+  Ethernet.loop();  // Loop to allow incoming TCP data
   return size;
 }
 
@@ -337,7 +389,7 @@ int EthernetClient::availableForWrite() {
     tcp_output(state->pcb);
   }
 
-  EthernetClass::loop();  // Loop to allow incoming TCP data
+  Ethernet.loop();  // Loop to allow incoming TCP data
   // NOTE: loop() requires a re-check of the state
   if (state == nullptr) {
     return 0;
@@ -355,7 +407,7 @@ void EthernetClient::flush() {
   }
 
   tcp_output(state->pcb);
-  EthernetClass::loop();  // Loop to allow incoming TCP data
+  Ethernet.loop();  // Loop to allow incoming TCP data
 }
 
 // --------------------------------------------------------------------------
@@ -387,7 +439,7 @@ int EthernetClient::available() {
   if (state == nullptr) {
     return 0;
   }
-  EthernetClass::loop();  // Allow data to come in
+  Ethernet.loop();  // Allow data to come in
   // NOTE: loop() requires a re-check of the state
   if (!isAvailable(state)) {
     return 0;
@@ -419,7 +471,7 @@ int EthernetClient::read() {
   if (state == nullptr) {
     return 0;
   }
-  EthernetClass::loop();  // Allow data to come in
+  Ethernet.loop();  // Allow data to come in
   // NOTE: loop() requires a re-check of the state
   if (!isAvailable(state)) {
     return -1;
@@ -459,7 +511,7 @@ int EthernetClient::read(uint8_t *buf, size_t size) {
     return 0;
   }
 
-  EthernetClass::loop();  // Allow data to come in
+  Ethernet.loop();  // Allow data to come in
   if (size == 0) {
     return 0;
   }
@@ -494,7 +546,7 @@ int EthernetClient::peek() {
   if (state == nullptr) {
     return 0;
   }
-  EthernetClass::loop();  // Allow data to come in
+  Ethernet.loop();  // Allow data to come in
   // NOTE: loop() requires a re-check of the state
   if (!isAvailable(state)) {
     return -1;

@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // ConnectionManager.h defines the connection manager for all connections.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_INTERNAL_CONNECTIONMANAGER_H_
-#define QNE_INTERNAL_CONNECTIONMANAGER_H_
+#ifndef QNETHERNET_INTERNAL_CONNECTIONMANAGER_H_
+#define QNETHERNET_INTERNAL_CONNECTIONMANAGER_H_
 
 // C++ includes
 #include <memory>
@@ -22,9 +22,8 @@ namespace internal {
 // ConnectionState holds all the state needed for a connection.
 class ConnectionManager final {
  public:
-  static ConnectionManager &instance() {
-    return manager;
-  }
+  // Accesses the singleton instance.
+  static ConnectionManager &instance();
 
   std::shared_ptr<ConnectionHolder> connect(const ip_addr_t *ipaddr,
                                             uint16_t port);
@@ -57,8 +56,6 @@ class ConnectionManager final {
   int availableForWrite(uint16_t port);  // Finds the minimum, or zero for none
 
  private:
-  static ConnectionManager manager;
-
   ConnectionManager() = default;
   ~ConnectionManager() = default;
 
@@ -74,12 +71,10 @@ class ConnectionManager final {
 
   std::vector<std::shared_ptr<ConnectionHolder>> connections_;
   std::vector<struct tcp_pcb *> listeners_;
-
-  friend class EthernetServer;
 };
 
 }  // namespace internal
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_INTERNAL_CONNECTIONMANAGER_H_
+#endif  // QNETHERNET_INTERNAL_CONNECTIONMANAGER_H_

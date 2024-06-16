@@ -1,14 +1,15 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // QNEthernetClient.h defines the TCP client interface.
 // This file is part of the QNEthernet library.
 
-#ifndef QNE_ETHERNETCLIENT_H_
-#define QNE_ETHERNETCLIENT_H_
+#ifndef QNETHERNET_ETHERNETCLIENT_H_
+#define QNETHERNET_ETHERNETCLIENT_H_
 
 // C++ includes
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 
 #include <Client.h>
@@ -46,6 +47,12 @@ class EthernetClient : public Client {
   int connect(IPAddress ip, uint16_t port) final;
   int connect(const char *host, uint16_t port) final;
 
+  // These functions start the connection process but don't wait for the
+  // connection to be complete. Note that DNS lookup might still take some time.
+  // Neither of these will return TIMED_OUT (-1).
+  int connectNoWait(const IPAddress &ip, uint16_t port);
+  int connectNoWait(const char *host, uint16_t port);
+
   uint8_t connected() final;
   explicit operator bool() final;
 
@@ -66,6 +73,19 @@ class EthernetClient : public Client {
   uint16_t localPort();
   IPAddress remoteIP();
   uint16_t remotePort();
+
+  // Returns an ID for the connection to which this client refers. It will
+  // return non-zero if connected and zero if not connected.
+  //
+  // This is useful because of the way EthernetClient objects can be passed
+  // around, copied, and moved, etc. Just taking an address of the object won't
+  // work because more than one object could refer to the same connection.
+  //
+  // Note that while multiple active connections won't share the same ID, it's
+  // possible for new connections to reuse IDs that aren't currently in use. In
+  // other words, there is a one-to-one correspondence between the set of
+  // connection IDs and currently active connections.
+  uintptr_t connectionId();
 
   // Bring Print::write functions into scope
   using Print::write;
@@ -94,7 +114,7 @@ class EthernetClient : public Client {
   int peek() final;
 
   // ----------------
-  //  Socket options
+  //  Socket Options
   // ----------------
 
   // Disables or enables Nagle's algorithm. This sets or clears the TCP_NODELAY
@@ -112,7 +132,7 @@ class EthernetClient : public Client {
   EthernetClient(std::shared_ptr<internal::ConnectionHolder> holder);
 
   // ip_addr_t version of connect() function.
-  bool connect(const ip_addr_t *ipaddr, uint16_t port);
+  int connect(const ip_addr_t *ipaddr, uint16_t port, bool wait);
 
   // Closes the connection. The `wait` parameter indicates whether to wait for
   // close or timeout. Set to true to wait and false to not wait. stop() calls
@@ -133,4 +153,4 @@ class EthernetClient : public Client {
 }  // namespace network
 }  // namespace qindesign
 
-#endif  // QNE_ETHERNETCLIENT_H_
+#endif  // QNETHERNET_ETHERNETCLIENT_H_

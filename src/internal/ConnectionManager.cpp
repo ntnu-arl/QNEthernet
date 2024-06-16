@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2021-2022 Shawn Silverman <shawn@pobox.com>
+// SPDX-FileCopyrightText: (c) 2021-2023 Shawn Silverman <shawn@pobox.com>
 // SPDX-License-Identifier: MIT
 
 // ConnectionManager.cpp implements the connection manager.
@@ -19,7 +19,10 @@ namespace qindesign {
 namespace network {
 namespace internal {
 
-ConnectionManager ConnectionManager::manager;
+ConnectionManager &ConnectionManager::instance() {
+  static ConnectionManager instance;
+  return instance;
+}
 
 // Connection state callback.
 err_t ConnectionManager::connectedFunc(void *arg, struct tcp_pcb *tpcb,
@@ -83,14 +86,7 @@ void ConnectionManager::errFunc(void *arg, err_t err) {
     // Copy any buffered data
     maybeCopyRemaining(holder);
 
-    tcp_pcb *pcb = holder->state->pcb;
     holder->state = nullptr;
-
-    if (err != ERR_CLSD && err != ERR_ABRT) {
-      if (tcp_close(pcb) != ERR_OK) {
-        tcp_abort(pcb);
-      }
-    }
   }
 }
 
@@ -120,7 +116,7 @@ err_t ConnectionManager::recvFunc(void *arg, struct tcp_pcb *tpcb,
       if (p != nullptr) {
         // Copy pbuf contents
         while (p != nullptr) {
-          unsigned char *data = reinterpret_cast<unsigned char *>(p->payload);
+          uint8_t *data = reinterpret_cast<uint8_t *>(p->payload);
           holder->remaining.insert(holder->remaining.end(),
                                    &data[0], &data[p->len]);
           p = p->next;
@@ -175,7 +171,7 @@ err_t ConnectionManager::recvFunc(void *arg, struct tcp_pcb *tpcb,
 
     // Copy all the data from the pbuf
     while (p != nullptr) {
-      unsigned char *data = reinterpret_cast<unsigned char *>(p->payload);
+      uint8_t *data = reinterpret_cast<uint8_t *>(p->payload);
       v.insert(v.end(), &data[0], &data[p->len]);
       p = p->next;
     }
@@ -242,7 +238,7 @@ std::shared_ptr<ConnectionHolder> ConnectionManager::connect(
   }
 
   // Try to bind
-  if (tcp_bind(pcb, IP_ADDR_ANY, 0) != ERR_OK) {
+  if (tcp_bind(pcb, IP_ANY_TYPE, 0) != ERR_OK) {
     tcp_abort(pcb);
     return nullptr;
   }
@@ -275,7 +271,7 @@ bool ConnectionManager::listen(uint16_t port, bool reuse) {
   if (reuse) {
     ip_set_option(pcb, SOF_REUSEADDR);
   }
-  if (tcp_bind(pcb, IP_ADDR_ANY, port) != ERR_OK) {
+  if (tcp_bind(pcb, IP_ANY_TYPE, port) != ERR_OK) {
     tcp_abort(pcb);
     return false;
   }
@@ -296,10 +292,17 @@ bool ConnectionManager::listen(uint16_t port, bool reuse) {
   return true;
 }
 
+// Gets the local port from the given tcp_pcb.
+static uint16_t getLocalPort(tcp_pcb *pcb) {
+  uint16_t port;
+  tcp_tcp_get_tcp_addrinfo(pcb, 1, nullptr, &port);
+  return port;
+}
+
 bool ConnectionManager::isListening(uint16_t port) const {
   auto it = std::find_if(
       listeners_.begin(), listeners_.end(), [port](const auto &elem) {
-        return (elem != nullptr) && (elem->local_port == port);
+        return (elem != nullptr) && (getLocalPort(elem) == port);
       });
   return (it != listeners_.end());
 }
@@ -307,14 +310,17 @@ bool ConnectionManager::isListening(uint16_t port) const {
 bool ConnectionManager::stopListening(uint16_t port) {
   auto it = std::find_if(
       listeners_.begin(), listeners_.end(), [port](const auto &elem) {
-        return (elem != nullptr) && (elem->local_port == port);
+        return (elem != nullptr) && (getLocalPort(elem) == port);
       });
   if (it == listeners_.end()) {
     return false;
   }
   tcp_pcb *pcb = *it;
   listeners_.erase(it);
-  return (tcp_close(pcb) == ERR_OK);
+  if (tcp_close(pcb) != ERR_OK) {
+    tcp_abort(pcb);
+  }
+  return true;
 }
 
 std::shared_ptr<ConnectionHolder> ConnectionManager::findConnected(
@@ -322,7 +328,7 @@ std::shared_ptr<ConnectionHolder> ConnectionManager::findConnected(
   auto it = std::find_if(
       connections_.begin(), connections_.end(), [port](const auto &elem) {
         const auto &state = elem->state;
-        return (state != nullptr) && (state->pcb->local_port == port);
+        return (state != nullptr) && (getLocalPort(state->pcb) == port);
       });
   if (it != connections_.end()) {
     return *it;
@@ -337,7 +343,7 @@ std::shared_ptr<ConnectionHolder> ConnectionManager::findAvailable(
       connections_.begin(), connections_.end(), [port](const auto &elem) {
         const auto &state = elem->state;
         return (state != nullptr) &&
-               (state->pcb->local_port == port) &&
+               (getLocalPort(state->pcb) == port) &&
                isAvailable(state);
       });
   if (it != connections_.end()) {
@@ -366,20 +372,20 @@ size_t ConnectionManager::write(uint16_t port, uint8_t b) {
   std::for_each(connections_.begin(), connections_.end(),
                 [port, b](const auto &elem) {
                   const auto &state = elem->state;
-                  if (state == nullptr || state->pcb->local_port != port) {
+                  if (state == nullptr || getLocalPort(state->pcb) != port) {
                     return;
                   }
                   if (tcp_sndbuf(state->pcb) < 1) {
                     if (tcp_output(state->pcb) != ERR_OK) {
                       return;
                     }
-                    EthernetClass::loop();
+                    Ethernet.loop();
                   }
                   if (tcp_sndbuf(state->pcb) >= 1) {
                     tcp_write(state->pcb, &b, 1, TCP_WRITE_FLAG_COPY);
                   }
                 });
-  EthernetClass::loop();
+  Ethernet.loop();
   return 1;
 }
 
@@ -391,21 +397,21 @@ size_t ConnectionManager::write(uint16_t port, const uint8_t *b, size_t len) {
   std::for_each(connections_.begin(), connections_.end(),
                 [port, b, size16](const auto &elem) {
                   const auto &state = elem->state;
-                  if (state == nullptr || state->pcb->local_port != port) {
+                  if (state == nullptr || getLocalPort(state->pcb) != port) {
                     return;
                   }
                   if (tcp_sndbuf(state->pcb) < size16) {
                     if (tcp_output(state->pcb) != ERR_OK) {
                       return;
                     }
-                    EthernetClass::loop();
+                    Ethernet.loop();
                   }
                   uint16_t len = std::min(size16, tcp_sndbuf(state->pcb));
                   if (len > 0) {
                     tcp_write(state->pcb, b, len, TCP_WRITE_FLAG_COPY);
                   }
                 });
-  EthernetClass::loop();
+  Ethernet.loop();
   return len;
 }
 
@@ -413,12 +419,12 @@ void ConnectionManager::flush(uint16_t port) {
   std::for_each(connections_.begin(), connections_.end(),
                 [port](const auto &elem) {
                   const auto &state = elem->state;
-                  if (state == nullptr || state->pcb->local_port != port) {
+                  if (state == nullptr || getLocalPort(state->pcb) != port) {
                     return;
                   }
                   tcp_output(state->pcb);
                 });
-  EthernetClass::loop();
+  Ethernet.loop();
 }
 
 int ConnectionManager::availableForWrite(uint16_t port) {
@@ -427,7 +433,7 @@ int ConnectionManager::availableForWrite(uint16_t port) {
   std::for_each(connections_.begin(), connections_.end(),
                 [port, &min, &found](const auto &elem) {
                   const auto &state = elem->state;
-                  if (state == nullptr || state->pcb->local_port != port) {
+                  if (state == nullptr || getLocalPort(state->pcb) != port) {
                     return;
                   }
                   min = std::min(min, tcp_sndbuf(state->pcb));
